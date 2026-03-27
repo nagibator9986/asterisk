@@ -1,0 +1,61 @@
+# ============================================================
+# Конфигурация интеллектуальной системы рекомендаций QoP
+# ============================================================
+
+asterisk:
+  host: "127.0.0.1"
+  ami_port: 5038
+  ami_username: "monitor"
+  ami_password: "monitor_secret"
+  sip_port: 5060
+  rtp_port_start: 10000
+  rtp_port_end: 20000
+  stun_server: "stun.l.google.com:19302"
+
+monitoring:
+  # Интервал агрегации метрик (секунды)
+  aggregation_interval: 3
+  # Максимальное количество хранимых сэмплов в памяти
+  max_samples: 1000
+
+ml_agent:
+  # Путь к обученным моделям
+  xgboost_model: "models/xgboost_model.json"
+  mlp_model: "models/mlp_model.pth"
+  scaler_path: "models/scaler.pkl"
+  # Пороги классификации
+  thresholds:
+    low_max_latency: 30      # мс
+    low_max_jitter: 5        # мс
+    low_max_packet_loss: 0.5 # %
+    high_min_latency: 150    # мс
+    high_min_packet_loss: 5  # %
+
+recommendation:
+  # Режимы QoP
+  levels:
+    low:
+      name: "Standard SIP + RTP"
+      description: "Без шифрования — минимальная нагрузка для доверенной сети"
+      sip_transport: "udp"
+      media_encryption: "none"
+    medium:
+      name: "SIP TLS only"
+      description: "Шифрование сигнализации, открытый голосовой трафик"
+      sip_transport: "tls"
+      media_encryption: "none"
+    high:
+      name: "SIP TLS + SRTP"
+      description: "Полное сквозное шифрование"
+      sip_transport: "tls"
+      media_encryption: "srtp"
+
+# Внутренние подсети (LAN), все остальное считается WAN
+trusted_networks:
+  - "192.168.0.0/16"
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+
+dashboard:
+  refresh_interval: 2  # секунды
+  alert_history_size: 50
