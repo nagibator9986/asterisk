@@ -3,7 +3,9 @@
 Главный модуль — оркестрация всей системы.
 
 Режимы запуска:
-  python main.py demo       — Демонстрация с симулятором (без Asterisk)
+  python main.py            — GUI-дашборд (по умолчанию)
+  python main.py gui        — GUI-дашборд с графическим интерфейсом
+  python main.py demo       — Демонстрация в консоли (без Asterisk)
   python main.py live       — Подключение к реальному Asterisk через AMI
   python main.py train      — Обучение ML-модели
   python main.py scenario   — Интерактивный режим с готовыми сценариями
@@ -258,12 +260,16 @@ class QoPSystem:
 
 
 def main():
-    mode = sys.argv[1] if len(sys.argv) > 1 else "demo"
+    mode = sys.argv[1] if len(sys.argv) > 1 else "gui"
     system = QoPSystem()
 
     if mode == "train":
         import train_model
         train_model.main()
+    elif mode == "gui":
+        from dashboard.gui_dashboard import QoPDashboard
+        app = QoPDashboard()
+        app.run()
     elif mode == "demo":
         asyncio.run(system.run_demo())
     elif mode == "live":
@@ -272,7 +278,7 @@ def main():
         asyncio.run(system.run_scenario())
     else:
         print(f"Неизвестный режим: {mode}")
-        print("Использование: python main.py [demo|live|train|scenario]")
+        print("Использование: python main.py [gui|demo|live|train|scenario]")
         sys.exit(1)
 
 
