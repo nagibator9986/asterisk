@@ -97,6 +97,12 @@ class HybridQoPModel:
               - probabilities: dict
               - xgb_probabilities: dict (промежуточные, от XGBoost)
         """
+        if self.xgb_model is None:
+            raise RuntimeError(
+                "Модель не обучена. Запустите trainer.run_full_pipeline() "
+                "или используйте QoPPredictor с предварительным вызовом load()."
+            )
+
         # Подготовка входа
         x_raw = np.array([[
             features.get("latency_ms", 0),
