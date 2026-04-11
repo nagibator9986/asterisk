@@ -74,7 +74,9 @@ def is_private_ip(ip_str: str) -> bool:
     """Определить, является ли IP внутренним (LAN)."""
     try:
         addr = ipaddress.ip_address(ip_str)
-        return addr.is_private
+        # is_global корректно работает в Python 3.11+
+        # (is_private ошибочно включает TEST-NET, shared, benchmarking и др.)
+        return not addr.is_global
     except ValueError:
         return False
 

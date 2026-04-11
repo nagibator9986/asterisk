@@ -56,14 +56,14 @@ class AMISimulator:
             "base_loss": 1.5,
         },
         "wan_wifi_public": {
-            "caller_ip": "203.0.113.50",
+            "caller_ip": "176.59.44.12",
             "callee_ip": "192.168.1.101",
             "base_latency": 45.0,
             "base_jitter": 8.0,
             "base_loss": 0.5,
         },
         "wan_degraded": {
-            "caller_ip": "198.51.100.77",
+            "caller_ip": "91.207.60.22",
             "callee_ip": "192.168.1.101",
             "base_latency": 180.0,
             "base_jitter": 40.0,
