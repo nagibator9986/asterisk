@@ -710,12 +710,26 @@ class QoPDashboard:
 
         async def on_metrics(metrics: CallMetrics):
             ch_id = metrics.channel_id
-            # Create card if new channel
+            logger.info(f"GUI получил метрики: {ch_id} "
+                        f"lat={metrics.latency_ms:.1f} jit={metrics.jitter_ms:.1f} "
+                        f"loss={metrics.packet_loss_pct:.2f} ext={metrics.is_external}")
+
+            # Создать карточку синхронно через root.after + небольшое ожидание
             if ch_id not in self._call_cards:
-                self.root.after(0, lambda c=ch_id, ip=metrics.caller_ip,
-                                ext=metrics.is_external:
-                                self._create_call_card(c, ip, ext))
-                await asyncio.sleep(0.1)
+                # Используем event для синхронизации
+                card_created = asyncio.Event()
+
+                def create_and_signal():
+                    self._create_call_card(ch_id, metrics.caller_ip, metrics.is_external)
+                    self._loop.call_soon_threadsafe(card_created.set)
+
+                self.root.after(0, create_and_signal)
+
+                # Ждём создания карточки (максимум 1 секунду)
+                try:
+                    await asyncio.wait_for(card_created.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    logger.warning(f"Card creation timeout for {ch_id}")
 
             features = metrics.to_feature_vector()
             self._process_tick(ch_id, metrics.caller_ip,
@@ -725,6 +739,7 @@ class QoPDashboard:
 
         try:
             await collector.connect()
+            collector._running = True  # ВАЖНО: активируем циклы event_loop и aggregation_loop
             self.root.after(0, lambda: self._set_status(
                 f"\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u043a {self._ami_host.get()}:{self._ami_port.get()}  \u2022  Live",
                 COLORS["qop_low"]))
