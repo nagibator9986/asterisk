@@ -1153,16 +1153,60 @@ class QoPDashboard:
 
     # ─── Pipeline ─────────────────────────────────────────────────────────
 
-    def _process_tick(self, channel_id: str, caller_ip: str,
-                      is_external: bool, features: dict):
-        prediction = self._predictor.predict(features)
+    def _handle_metrics_sync(self, channel_id: str, caller_ip: str,
+                             is_external: bool, features: dict):
+        """
+        Синхронная обработка метрик в главном потоке tkinter.
+        Вызывается через root.after из async callback.
+        """
+        # Создать карточку если её ещё нет
+        if channel_id not in self._call_cards:
+            self._create_call_card(channel_id, caller_ip, is_external)
 
+        # ML-предсказание (быстрое, ~1ms)
+        try:
+            prediction = self._predictor.predict(features)
+        except Exception as e:
+            logger.error(f"Prediction failed: {e}")
+            return
+
+        # Рекомендация
         rec = self._rec_engine.process_prediction(
             channel_id=channel_id,
             prediction=prediction,
             metrics={**features, "caller_ip": caller_ip},
         )
 
+        # Обновление карточки — прямо сейчас, т.к. уже в главном потоке
+        self._update_call_card(channel_id, features, prediction)
+
+        # Алерт при смене уровня
+        if rec.is_change:
+            level_order = {"low": 0, "medium": 1, "high": 2}
+            going_down = level_order.get(rec.level, 0) < level_order.get(rec.previous_level, 0)
+
+            if going_down:
+                sev = "critical" if rec.level == "low" else "warning"
+                title = "Деградация канала — понижение профиля QoP"
+            else:
+                sev = "info"
+                title = "Улучшение канала — повышение профиля QoP"
+
+            msg = (f"{channel_id}: {rec.previous_level.upper()} → {rec.level.upper()}\n"
+                   f"Задержка: {rec.latency_ms:.0f} мс  •  "
+                   f"Джиттер: {rec.jitter_ms:.1f} мс  •  "
+                   f"Потери: {rec.packet_loss_pct:.2f}%")
+            self._add_alert(sev, title, msg)
+
+    def _process_tick(self, channel_id: str, caller_ip: str,
+                      is_external: bool, features: dict):
+        """Для Demo режима — запуск из async потока."""
+        prediction = self._predictor.predict(features)
+        rec = self._rec_engine.process_prediction(
+            channel_id=channel_id,
+            prediction=prediction,
+            metrics={**features, "caller_ip": caller_ip},
+        )
         self.root.after(0, lambda: self._update_call_card(
             channel_id, features, prediction))
 
@@ -1250,28 +1294,27 @@ class QoPDashboard:
         collector = AMICollector(tmp_cfg)
 
         async def on_metrics(metrics: CallMetrics):
+            """Передаём метрики в главный поток tkinter одним callback."""
             ch_id = metrics.channel_id
+            features = metrics.to_feature_vector()
+            caller_ip = metrics.caller_ip
+            is_ext = metrics.is_external
+
             logger.info(f"GUI получил метрики: {ch_id} lat={metrics.latency_ms:.1f} "
                         f"jit={metrics.jitter_ms:.1f} loss={metrics.packet_loss_pct:.2f}")
 
-            if ch_id not in self._call_cards:
-                card_created = asyncio.Event()
+            # Всё выполняется в главном потоке tkinter
+            # (избегаем race conditions с self._call_cards)
+            self.root.after(0, lambda:
+                self._handle_metrics_sync(ch_id, caller_ip, is_ext, features))
 
-                def create_and_signal():
-                    self._create_call_card(ch_id, metrics.caller_ip, metrics.is_external)
-                    self._loop.call_soon_threadsafe(card_created.set)
-
-                self.root.after(0, create_and_signal)
-                try:
-                    await asyncio.wait_for(card_created.wait(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    logger.warning(f"Card creation timeout for {ch_id}")
-
-            features = metrics.to_feature_vector()
-            self._process_tick(ch_id, metrics.caller_ip,
-                               metrics.is_external, features)
+        def on_hangup(channel_id: str):
+            """Удалить карточку вызова при завершении канала."""
+            logger.info(f"GUI: удаление канала {channel_id}")
+            self.root.after(0, lambda: self._remove_call_card(channel_id))
 
         collector.on_metrics(on_metrics)
+        collector.on_hangup(on_hangup)
 
         try:
             await collector.connect()

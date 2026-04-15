@@ -106,6 +106,8 @@ class AMICollector:
 
         # Callback для отправки метрик в ML-агент
         self._on_metrics_callback: Optional[Callable[[CallMetrics], Awaitable[None]]] = None
+        # Callback для уведомления о завершении канала
+        self._on_hangup_callback: Optional[Callable[[str], None]] = None
 
         self._running = False
         self._reader: Optional[asyncio.StreamReader] = None
@@ -114,6 +116,10 @@ class AMICollector:
     def on_metrics(self, callback: Callable[[CallMetrics], Awaitable[None]]):
         """Зарегистрировать callback для получения агрегированных метрик."""
         self._on_metrics_callback = callback
+
+    def on_hangup(self, callback: Callable[[str], None]):
+        """Зарегистрировать callback для уведомления о завершении канала."""
+        self._on_hangup_callback = callback
 
     async def connect(self):
         """Подключиться к AMI."""
@@ -284,6 +290,13 @@ class AMICollector:
         if channel in self.active_calls:
             logger.info(f"Канал завершен: {channel}")
             del self.active_calls[channel]
+
+        # Вызов hangup callback (если зарегистрирован)
+        if self._on_hangup_callback:
+            try:
+                self._on_hangup_callback(channel)
+            except Exception as e:
+                logger.error(f"Ошибка hangup callback: {e}")
 
     async def _aggregation_loop(self):
         """Периодическая отправка агрегированных метрик в ML-агент."""
