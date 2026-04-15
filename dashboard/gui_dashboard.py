@@ -307,8 +307,9 @@ class QualityBar(tk.Canvas):
     def __init__(self, parent, width: int = 160, height: int = 8, **kwargs):
         super().__init__(parent, bg=COLORS["bg_card"], highlightthickness=0,
                          width=width, height=height, **kwargs)
-        self._w = width
-        self._h = height
+        # ВАЖНО: НЕ использовать self._w / self._h — они зарезервированы tkinter
+        self._bar_w = width
+        self._bar_h = height
         self._value = 0
         self._color = COLORS["qop_low"]
         self._draw()
@@ -322,12 +323,12 @@ class QualityBar(tk.Canvas):
     def _draw(self):
         self.delete("all")
         # Фон
-        self.create_rectangle(0, 0, self._w, self._h,
+        self.create_rectangle(0, 0, self._bar_w, self._bar_h,
                               fill=COLORS["bg_accent"], outline="")
         # Заливка
-        fill_w = int(self._w * self._value / 100)
+        fill_w = int(self._bar_w * self._value / 100)
         if fill_w > 0:
-            self.create_rectangle(0, 0, fill_w, self._h,
+            self.create_rectangle(0, 0, fill_w, self._bar_h,
                                   fill=self._color, outline="")
 
 
