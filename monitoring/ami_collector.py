@@ -202,73 +202,88 @@ class AMICollector:
             self._handle_hangup(event)
 
     async def _handle_rtcp(self, event: dict):
-        """Обработать RTCP-пакет — извлечь метрики качества."""
+        """
+        Обработать RTCP-пакет — извлечь метрики качества.
+
+        Формат события Asterisk RTCPReceived (реальные поля):
+          RTT: 0.0049              (секунды!)
+          Report0IAJitter: 27      (в единицах кодека, обычно 1/8000 сек)
+          Report0FractionLost: 0   (0-255, где 255 = 100%)
+          Report0CumulativeLost: 0 (абсолютное число)
+          Report0HighestSequence: 7328
+          From: 192.168.0.218:4001 (IP:порт абонента)
+          SentPackets: 2904
+        """
         channel = event.get("Channel", "unknown")
 
-        # Извлечение метрик из RTCP
         try:
-            # RTT (Round-Trip Time) -> latency = RTT / 2
-            rtt_str = event.get("RTT", "0.0")
-            rtt = float(rtt_str.replace("ms", "").strip())
-            latency = rtt / 2.0
+            # RTT в секундах → latency в мс (RTT / 2)
+            rtt_sec = float(event.get("RTT", "0.0"))
+            latency_ms = (rtt_sec / 2.0) * 1000.0
 
-            # Jitter
-            jitter_str = event.get("IAJitter", event.get("Jitter", "0.0"))
-            jitter = float(str(jitter_str).replace("ms", "").strip())
+            # Jitter — Asterisk отдает в сэмплах (1/8000 сек для ulaw/alaw)
+            # Переводим в миллисекунды
+            jitter_raw = float(event.get("Report0IAJitter", "0"))
+            jitter_ms = (jitter_raw / 8000.0) * 1000.0  # = jitter_raw / 8
 
-            # Packet Loss
-            loss_str = event.get("PacketLoss", event.get("CumulativeLoss", "0"))
-            total_str = event.get("PacketsReceived", event.get("SentPackets", "1"))
-            packets_lost = int(loss_str)
-            packets_total = max(int(total_str), 1)
-            loss_pct = (packets_lost / packets_total) * 100.0
+            # Packet Loss: используем FractionLost (0-255, где 255 = 100%)
+            # Это более точно чем CumulativeLost, т.к. считается за окно
+            fraction_lost = float(event.get("Report0FractionLost", "0"))
+            loss_pct = (fraction_lost / 255.0) * 100.0
+
+            # Дополнительно — через CumulativeLost/SentPackets (для валидации)
+            cum_lost = int(event.get("Report0CumulativeLost", "0"))
+            sent_pkts = max(int(event.get("SentPackets", "1")), 1)
+            # Если FractionLost = 0, но накопилось потерь — используем cumulative
+            if loss_pct == 0 and cum_lost > 0:
+                loss_pct = (cum_lost / sent_pkts) * 100.0
 
         except (ValueError, TypeError) as e:
             logger.debug(f"Не удалось распарсить RTCP: {e}")
             return
 
-        # Найти или создать метрики для этого канала
-        base_channel = channel.split("-")[0] if "-" in channel else channel
+        # Извлечь IP абонента (удаленный конец) из поля From
+        # Формат: "192.168.0.218:4001" - убираем порт
+        from_field = event.get("From", "")
+        from_ip = from_field.split(":")[0] if from_field else ""
 
-        if base_channel in self.active_calls:
-            self.active_calls[base_channel].update(latency, jitter, loss_pct)
+        # Определить LAN/WAN
+        is_ext = not is_private_ip(from_ip) if from_ip else False
+
+        # Использовать полный channel ID (без разбиения) для точной идентификации
+        if channel in self.active_calls:
+            self.active_calls[channel].update(latency_ms, jitter_ms, loss_pct)
+            # Обновить IP если еще не знали
+            if not self.active_calls[channel].caller_ip:
+                self.active_calls[channel].caller_ip = from_ip
+                self.active_calls[channel].is_external = is_ext
         else:
-            # Определить IP из события
-            from_ip = event.get("From", "").split(":")[0] if "From" in event else ""
-            from_ip = from_ip.replace("IPAddress:", "").strip()
-            is_ext = not is_private_ip(from_ip) if from_ip else True
-
             metrics = CallMetrics(
-                channel_id=base_channel,
+                channel_id=channel,
                 caller_ip=from_ip,
                 callee_ip="",
                 is_external=is_ext,
             )
-            metrics.update(latency, jitter, loss_pct)
-            self.active_calls[base_channel] = metrics
+            metrics.update(latency_ms, jitter_ms, loss_pct)
+            self.active_calls[channel] = metrics
+            logger.info(
+                f"Новый RTCP-канал: {channel} от {from_ip} "
+                f"({'WAN' if is_ext else 'LAN'})"
+            )
 
     def _handle_new_channel(self, event: dict):
         """Зарегистрировать новый канал."""
         channel = event.get("Channel", "unknown")
-        base_channel = channel.split("-")[0] if "-" in channel else channel
         logger.info(f"Новый канал: {channel}")
-
-        if base_channel not in self.active_calls:
-            caller_id = event.get("CallerIDNum", "")
-            self.active_calls[base_channel] = CallMetrics(
-                channel_id=base_channel,
-                caller_ip="",
-                callee_ip="",
-                is_external=False,
-            )
+        # CallMetrics создается лениво при первом RTCP-событии,
+        # т.к. на момент Newchannel IP-информации ещё нет
 
     def _handle_hangup(self, event: dict):
         """Удалить метрики завершенного канала."""
         channel = event.get("Channel", "unknown")
-        base_channel = channel.split("-")[0] if "-" in channel else channel
-        if base_channel in self.active_calls:
+        if channel in self.active_calls:
             logger.info(f"Канал завершен: {channel}")
-            del self.active_calls[base_channel]
+            del self.active_calls[channel]
 
     async def _aggregation_loop(self):
         """Периодическая отправка агрегированных метрик в ML-агент."""
