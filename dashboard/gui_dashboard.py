@@ -471,11 +471,19 @@ class QoPDashboard:
         self.root = tk.Tk()
         self.root.title("QoP Intelligent Recommendation System")
         self.root.configure(bg=COLORS["bg_void"])
-        self.root.geometry("1480x920")
-        self.root.minsize(1280, 800)
+        # Авто-подгон под разрешение экрана
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        win_w = min(1480, screen_w - 40)
+        win_h = min(920, screen_h - 80)
+        x = (screen_w - win_w) // 2
+        y = (screen_h - win_h) // 2
+        self.root.geometry(f"{win_w}x{win_h}+{x}+{y}")
+        self.root.minsize(960, 600)
 
+        title_size = 22 if screen_w >= 1400 else 18
         self.fonts = {
-            "title": ("Helvetica", 22, "bold"),
+            "title": ("Helvetica", title_size, "bold"),
             "subtitle": ("Helvetica", 11),
             "heading": ("Helvetica", 14, "bold"),
             "body": ("Helvetica", 11),
@@ -570,8 +578,9 @@ class QoPDashboard:
         self._cards_canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Правая часть — алерты + контролы
-        right = tk.Frame(content, bg=COLORS["bg_void"], width=420)
+        # Правая часть — алерты + контролы (адаптивная ширина)
+        right_w = min(420, max(300, (self.root.winfo_screenwidth() - 40) // 4))
+        right = tk.Frame(content, bg=COLORS["bg_void"], width=right_w)
         right.pack(side="right", fill="y", padx=(16, 0))
         right.pack_propagate(False)
 
@@ -759,7 +768,7 @@ class QoPDashboard:
         # Запуск
         self._btn_start = StyledButton(
             ci, "ЗАПУСТИТЬ", COLORS["btn_success"], COLORS["btn_success_hover"],
-            command=self._on_start, width=240, height=44, icon="▶")
+            command=self._on_start, width=220, height=42, icon="▶")
         self._btn_start.pack(pady=(0, 8))
 
         tk.Frame(ci, bg=COLORS["border"], height=1).pack(fill="x", pady=12)
@@ -777,7 +786,7 @@ class QoPDashboard:
              self._clear_anomalies, "✓"),
         ]:
             StyledButton(ci, text, color, hover, command=cmd,
-                         width=240, height=36, icon=icon).pack(pady=3)
+                         width=220, height=34, icon=icon).pack(pady=3)
 
     def _on_mode_change(self):
         if self._mode_var.get() == "live":
@@ -1101,12 +1110,12 @@ class QoPDashboard:
 
         tk.Label(inner, text=title, font=self.fonts["body_bold"],
                  bg=COLORS["bg_card"], fg=COLORS["text_primary"],
-                 anchor="w", wraplength=370, justify="left"
+                 anchor="w", wraplength=320, justify="left"
                  ).pack(fill="x", pady=(4, 2))
 
         tk.Label(inner, text=message, font=self.fonts["small"],
                  bg=COLORS["bg_card"], fg=COLORS["text_secondary"],
-                 anchor="w", wraplength=370, justify="left"
+                 anchor="w", wraplength=320, justify="left"
                  ).pack(fill="x")
 
         self._alerts_widgets.append(af)
