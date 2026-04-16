@@ -520,7 +520,7 @@ class QoPDashboard:
         }
 
         # AMI settings
-        self._ami_host = tk.StringVar(value="192.168.0.215")
+        self._ami_host = tk.StringVar(value="172.20.10.5")
         self._ami_port = tk.StringVar(value="5038")
         self._ami_user = tk.StringVar(value="monitor")
         self._ami_pass = tk.StringVar(value="monitor_secret")
