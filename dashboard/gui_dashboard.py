@@ -584,8 +584,9 @@ class QoPDashboard:
         right.pack(side="right", fill="y", padx=(16, 0))
         right.pack_propagate(False)
 
-        self._build_alerts_panel(right)
+        # Управление сверху (фиксированная высота), алерты снизу (растягиваются)
         self._build_controls_panel(right)
+        self._build_alerts_panel(right)
 
     def _on_canvas_resize(self, event):
         self._cards_canvas.itemconfig("cards", width=event.width)
@@ -715,32 +716,31 @@ class QoPDashboard:
     def _build_controls_panel(self, parent):
         tk.Label(parent, text="⚙  Управление",
                  font=self.fonts["heading"], bg=COLORS["bg_void"],
-                 fg=COLORS["text_primary"]).pack(anchor="w", pady=(0, 10))
+                 fg=COLORS["text_primary"]).pack(anchor="w", pady=(0, 6))
 
         ctrl = tk.Frame(parent, bg=COLORS["bg_panel"],
                         highlightbackground=COLORS["border"], highlightthickness=1)
         ctrl.pack(fill="x")
         ci = tk.Frame(ctrl, bg=COLORS["bg_panel"])
-        ci.pack(fill="x", padx=16, pady=14)
+        ci.pack(fill="x", padx=12, pady=10)
 
-        # Режим работы
-        tk.Label(ci, text="РЕЖИМ РАБОТЫ",
+        # Режим работы + радиокнопки в одну строку для компактности
+        mode_row = tk.Frame(ci, bg=COLORS["bg_panel"])
+        mode_row.pack(fill="x", pady=(0, 6))
+
+        tk.Label(mode_row, text="РЕЖИМ:",
                  font=self.fonts["tiny"], bg=COLORS["bg_panel"],
-                 fg=COLORS["text_muted"]).pack(anchor="w")
+                 fg=COLORS["text_muted"]).pack(side="left")
 
         self._mode_var = tk.StringVar(value="live")
-        modes = tk.Frame(ci, bg=COLORS["bg_panel"])
-        modes.pack(fill="x", pady=(4, 10))
-
-        for val, label in [("demo", "Demo (симулятор)"),
-                           ("live", "Live (Asterisk AMI)")]:
-            tk.Radiobutton(modes, text=label, variable=self._mode_var,
-                           value=val, font=self.fonts["body"],
+        for val, label in [("demo", "Demo"), ("live", "Live (AMI)")]:
+            tk.Radiobutton(mode_row, text=label, variable=self._mode_var,
+                           value=val, font=self.fonts["small"],
                            bg=COLORS["bg_panel"], fg=COLORS["text_primary"],
                            selectcolor=COLORS["bg_card"],
                            activebackground=COLORS["bg_panel"],
                            activeforeground=COLORS["text_white"],
-                           command=self._on_mode_change).pack(anchor="w")
+                           command=self._on_mode_change).pack(side="left", padx=(6, 0))
 
         # AMI settings
         self._ami_frame = tk.Frame(ci, bg=COLORS["bg_panel"])
@@ -748,12 +748,12 @@ class QoPDashboard:
 
         tk.Label(self._ami_frame, text="ПАРАМЕТРЫ AMI",
                  font=self.fonts["tiny"], bg=COLORS["bg_panel"],
-                 fg=COLORS["text_muted"]).pack(anchor="w", pady=(4, 4))
+                 fg=COLORS["text_muted"]).pack(anchor="w", pady=(2, 2))
 
         for label_text, var in [("Host", self._ami_host), ("Port", self._ami_port),
                                  ("User", self._ami_user), ("Password", self._ami_pass)]:
             row = tk.Frame(self._ami_frame, bg=COLORS["bg_panel"])
-            row.pack(fill="x", pady=2)
+            row.pack(fill="x", pady=1)
             tk.Label(row, text=label_text, font=self.fonts["small"],
                      bg=COLORS["bg_panel"], fg=COLORS["text_secondary"],
                      width=9, anchor="w").pack(side="left")
@@ -763,19 +763,19 @@ class QoPDashboard:
                      highlightbackground=COLORS["border"],
                      highlightthickness=1, relief="flat").pack(side="left", fill="x", expand=True)
 
-        tk.Frame(ci, bg=COLORS["border"], height=1).pack(fill="x", pady=12)
+        tk.Frame(ci, bg=COLORS["border"], height=1).pack(fill="x", pady=8)
 
         # Запуск
         self._btn_start = StyledButton(
             ci, "ЗАПУСТИТЬ", COLORS["btn_success"], COLORS["btn_success_hover"],
-            command=self._on_start, width=220, height=42, icon="▶")
-        self._btn_start.pack(pady=(0, 8))
+            command=self._on_start, width=220, height=40, icon="▶")
+        self._btn_start.pack(pady=(0, 6))
 
-        tk.Frame(ci, bg=COLORS["border"], height=1).pack(fill="x", pady=12)
+        tk.Frame(ci, bg=COLORS["border"], height=1).pack(fill="x", pady=8)
 
         tk.Label(ci, text="СЦЕНАРИИ АНОМАЛИЙ",
                  font=self.fonts["tiny"], bg=COLORS["bg_panel"],
-                 fg=COLORS["text_muted"]).pack(anchor="w", pady=(0, 6))
+                 fg=COLORS["text_muted"]).pack(anchor="w", pady=(0, 4))
 
         for text, color, hover, cmd, icon in [
             ("Деградация 4G", COLORS["btn_danger"], COLORS["btn_danger_hover"],
@@ -786,7 +786,7 @@ class QoPDashboard:
              self._clear_anomalies, "✓"),
         ]:
             StyledButton(ci, text, color, hover, command=cmd,
-                         width=220, height=34, icon=icon).pack(pady=3)
+                         width=220, height=32, icon=icon).pack(pady=2)
 
     def _on_mode_change(self):
         if self._mode_var.get() == "live":
