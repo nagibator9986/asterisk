@@ -1145,7 +1145,12 @@ class QoPDashboard:
         thread.start()
 
     def _worker_thread(self, mode: str):
-        self._loop = asyncio.new_event_loop()
+        # Windows: SelectorEventLoop вместо Proactor — избегает зависания open_connection
+        import sys
+        if sys.platform == "win32":
+            self._loop = asyncio.SelectorEventLoop()
+        else:
+            self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         try:
             if mode == "demo":
